@@ -7,8 +7,8 @@ import random
 
 import pandas as pd
 
-from mlos.Spaces import Dimension, Hypergrid, Point, SimpleHypergrid
-from mlos.Spaces.HypergridAdapters import HierarchicalToFlatHypergridAdapter
+from mlos.Spaces import Hypergrid, Point, SimpleHypergrid
+from mlos.Spaces.HypergridAdapters import CategoricalToDiscreteHypergridAdapter
 from mlos.Tracer import trace
 from mlos.Logger import create_logger
 from mlos.Optimizers.RegressionModels.Prediction import Prediction
@@ -48,7 +48,7 @@ class HomogeneousRandomForestRegressionModel(RegressionModel):
             logger=None
     ):
         if logger is None:
-            logger = create_logger("HomogeneousRandomForestRegressionModel")
+            logger = create_logger(self.__class__.__name__)
         self.logger = logger
 
         assert model_config in homogeneous_random_forest_config_store.parameter_space
@@ -62,10 +62,10 @@ class HomogeneousRandomForestRegressionModel(RegressionModel):
             fit_state=HomogeneousRandomForestFitState()
         )
 
-        self._input_space_adapter = HierarchicalToFlatHypergridAdapter(adaptee=self.input_space)
+        self._input_space_adapter = CategoricalToDiscreteHypergridAdapter(adaptee=self.input_space)
 
         self.target_dimension_names = [dimension.name for dimension in self.output_space.dimensions]
-        assert len(self.target_dimension_names) == 1, "Single target predictions for now."
+        assert len(self.target_dimension_names) == 1, "This is a single-objective model"
 
         self._decision_trees = []
         self._create_estimators()
@@ -130,8 +130,7 @@ class HomogeneousRandomForestRegressionModel(RegressionModel):
             self._decision_trees.append(estimator)
             self.fit_state.decision_trees_fit_states.append(estimator.fit_state)
 
-    @staticmethod
-    def _create_random_flat_subspace(original_space, subspace_name, max_num_dimensions):
+    def _create_random_flat_subspace(self, original_space, subspace_name, max_num_dimensions):
         """ Creates a random simple hypergrid from the hypergrid with up to max_num_dimensions dimensions.
 
         TODO: move this to the *Hypergrid classes.
@@ -140,16 +139,16 @@ class HomogeneousRandomForestRegressionModel(RegressionModel):
         :return:
         """
         random_point = original_space.random()
-        dimensions_for_point = original_space.get_dimensions_for_point(random_point, return_join_dimensions=False)
+        projected_random_point = self._input_space_adapter.project_point(random_point)
+        dimensions_for_point = []
+        for dimension_name, _ in projected_random_point:
+            dimensions_for_point.append(self._input_space_adapter[dimension_name])
+
         selected_dimensions = random.sample(dimensions_for_point, min(len(dimensions_for_point), max_num_dimensions))
-        flat_dimensions = []
-        for dimension in selected_dimensions:
-            flat_dimension = dimension.copy()
-            flat_dimension.name = Dimension.flatten_dimension_name(flat_dimension.name)
-            flat_dimensions.append(flat_dimension)
+
         flat_hypergrid = SimpleHypergrid(
             name=subspace_name,
-            dimensions=flat_dimensions
+            dimensions=selected_dimensions
         )
         return flat_hypergrid
 

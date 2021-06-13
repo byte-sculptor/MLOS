@@ -78,6 +78,7 @@ class Prediction:
         for output_enum in predictor_outputs:
             assert output_enum in set(column_name for column_name in Prediction.LegalColumnNames), \
                 f'PredictionSchema Error: Passed PredictionSchema enum "{output_enum}" not in Prediction.PredictionSchema'
+
         self.predictor_outputs = predictor_outputs
 
         # expect dataframe column names to be values from Enum above
@@ -94,6 +95,9 @@ class Prediction:
             self._dataframe = dataframe
         else:
             self._dataframe.loc[dataframe.index, self.expected_column_names] = dataframe[self.expected_column_names]
+
+    def clear_dataframe(self):
+        self._dataframe = pd.DataFrame(columns=self.expected_column_names)
 
     def validate_dataframe(self, dataframe: pd.DataFrame):
 
